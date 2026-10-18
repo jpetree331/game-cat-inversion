@@ -1,0 +1,12 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const E=require('../src/engine.js');
+const base=()=>({spawn:{x:48,y:224},exit:{x:420,y:216,w:24,h:24},seals:[{id:'s',x:220,y:26,w:14,h:14}],hazards:[],platforms:[],switches:[],gates:[]});
+const advance=(s,seconds,move=0)=>{for(let t=0;t<seconds;t+=1/120)E.step(s,{move},1/120)};
+test('flip round trip lands precisely on ceiling and floor',()=>{const s=E.create(base());assert(E.flip(s));advance(s,.3);assert.equal(s.cat.y,24);assert(s.cat.grounded);assert(E.flip(s));advance(s,.3);assert.equal(s.cat.y,224);assert.equal(s.flips,2)});
+test('airborne flip is refused',()=>{const s=E.create(base());E.flip(s);assert.equal(E.flip(s),false);assert.equal(s.flips,1)});
+test('horizontal bounds and no drift through walls',()=>{const s=E.create(base());advance(s,2,-1);assert.equal(s.cat.x,24);advance(s,8,1);assert.equal(s.cat.x,442)});
+test('rapid flip hits thin hazards along its path',()=>{const l=base();l.hazards=[{x:40,y:130,w:30,h:5}];const s=E.create(l);E.flip(s);advance(s,.3);assert.equal(s.status,'dead')});
+test('first intermediate surface catches upward cat',()=>{const l=base();l.platforms=[{x:35,y:130,w:50,h:12}];const s=E.create(l);E.flip(s);advance(s,.3);assert.equal(s.cat.y,142);assert(s.cat.grounded)});
+test('dead and completed state freeze and refuse inversion',()=>{for(const status of ['dead','complete']){const s=E.create(base());s.status=status;advance(s,1,1);assert.equal(s.cat.x,48);assert.equal(E.flip(s),false)}});
+test('exit requires all moon seals',()=>{const l=base();l.spawn={x:420,y:224};const s=E.create(l);advance(s,.1);assert.equal(s.status,'playing');s.seals.add('s');advance(s,.1);assert.equal(s.status,'complete')});

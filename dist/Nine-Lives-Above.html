@@ -225,7 +225,7 @@
   let storage;try{storage=window.localStorage}catch{storage=null}
   const progress=CatProgress.read(storage,levels.length),keys=new Set(),touch=new Map();
   const reduced=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  let index=0,state,paused=false,menu='',last=0,accumulator=0,clock=0,deathTimer=0,deaths=0,particles=[],trail=[],audio,fieldActive=false;
+  let index=0,state,paused=false,menu='',last=0,accumulator=0,clock=0,roomStart=0,deathTimer=0,deaths=0,particles=[],trail=[],audio,fieldActive=false;
   function save(){CatProgress.write(storage,progress)}
   function focusGame(){canvas.focus({preventScroll:true})}
   function clearInput(){keys.clear();touch.clear();accumulator=0}
@@ -239,12 +239,14 @@
     }catch{progress.sound=false;updateSound()}
   }
   function updateSound(){$('sound').textContent=progress.sound?'Sound on':'Sound off';$('sound').setAttribute('aria-pressed',String(progress.sound))}
-  function load(n,resetDeaths=true){index=n;state=E.create(levels[index]);state.levelNumber=index;if(resetDeaths)deaths=0;deathTimer=0;particles=[];trail=[];closeOverlay();$('hint-text').hidden=true;$('hint').setAttribute('aria-expanded','false');$('hint-text').textContent=state.level.hint;$('room-number').textContent=`ROOM ${String(index+1).padStart(2,'0')} / ${levels.length}`;$('room-title').textContent=state.level.name;updateHud();focusGame()}
+  function load(n,resetDeaths=true){index=n;state=E.create(levels[index]);state.levelNumber=index;if(resetDeaths){deaths=0;roomStart=clock}deathTimer=0;particles=[];trail=[];closeOverlay();$('hint-text').hidden=true;$('hint').setAttribute('aria-expanded','false');$('hint-text').textContent=state.level.hint;$('room-number').textContent=`ROOM ${String(index+1).padStart(2,'0')} / ${levels.length}`;$('room-title').textContent=state.level.name;updateHud();focusGame()}
   function closeOverlay(){paused=false;menu='';overlay.hidden=true;overlay.removeAttribute('role');overlay.removeAttribute('aria-modal');overlay.replaceChildren();$('pause').textContent='Pause';clearInput()}
   function show(title,body,actions,kind){clearInput();paused=true;menu=kind;overlay.hidden=false;overlay.setAttribute('role','dialog');overlay.setAttribute('aria-modal','true');overlay.setAttribute('aria-label',title);overlay.replaceChildren();const h=document.createElement('h2');h.textContent=title;overlay.append(h);if(body){const p=document.createElement('p');p.textContent=body;overlay.append(p)}const controls=document.createElement('div');controls.className='actions';actions.forEach(([label,action,primary])=>{const b=document.createElement('button');b.textContent=label;if(primary)b.className='primary';b.onclick=action;controls.append(b)});overlay.append(controls);$('pause').textContent='Resume';overlay.querySelector('button')?.focus({preventScroll:true})}
   function resume(){if(menu==='complete')return;closeOverlay();focusGame()}
   function pause(){if(state.status==='complete')return;if(paused){resume();return}show('A little catnap','The moon will wait for you.',[['Keep exploring',resume,true],['Restart room',()=>load(index)]],'pause')}
   function rooms(){show('The Moonhouse','Choose a room. Every door is yours to explore.',[['Back to room',()=>{if(state.status==='complete')complete();else resume()}]],'rooms');const grid=document.createElement('div');grid.className='room-grid';levels.forEach((l,n)=>{const b=document.createElement('button');b.textContent=`${String(n+1).padStart(2,'0')}${progress.completed.includes(n)?' ✓':''}`;b.setAttribute('aria-label',`Room ${n+1}: ${l.name}${progress.completed.includes(n)?', completed':''}`);if(progress.completed.includes(n))b.className='done';b.onclick=()=>load(n);grid.append(b)});overlay.insertBefore(grid,overlay.lastChild);grid.querySelector('button').focus()}
+  // Game Shelf leaderboard: best time per room. The clock only runs while unpaused; retries count.
+  function report(){const seconds=Math.round((clock-roomStart)*100)/100;if(seconds>=1&&window.ShelfScores)window.ShelfScores.submit({board:'room-'+state.level.id,label:`Room ${index+1}: ${state.level.name}`,value:seconds})}
   function complete(){const final=index===levels.length-1;show(final?'Home, whichever way is up.':'A little closer to home.',final?`You found the last doorway. ${progress.completed.length} of ${levels.length} rooms explored.`:`Room ${index+1} complete · ${state.flips} flips · ${deaths} retries`,final?[['Explore the rooms',rooms,true],['Play again',()=>load(0)]]:[['Next room',()=>load(index+1),true],['Try this room again',()=>load(index)]],'complete')}
   function flip(){if(!paused)E.flip(state)}
   function updateHud(){
@@ -257,7 +259,7 @@
     $('flip').setAttribute('aria-disabled',String(fieldActive));
   }
   function burst(event){if(reduced)return;const count=event==='complete'?32:12,color=event==='death'?'#dfa4ae':event==='flip'?'#9fdac9':'#efd68e';for(let i=0;i<count;i++){const a=Math.random()*Math.PI*2;particles.push({x:state.cat.x+7,y:state.cat.y+8,vx:Math.cos(a)*35,vy:Math.sin(a)*35,life:1,color})}}
-  function events(){for(const event of state.events.splice(0)){tone(event);burst(event);if(event==='death'){deaths++;deathTimer=.6;clearInput()}if(event==='complete'){if(!progress.completed.includes(index)){progress.completed.push(index);save()}complete()}updateHud()}}
+  function events(){for(const event of state.events.splice(0)){tone(event);burst(event);if(event==='death'){deaths++;deathTimer=.6;clearInput()}if(event==='complete'){if(!progress.completed.includes(index)){progress.completed.push(index);save()}report();complete()}updateHud()}}
   document.addEventListener('keydown',e=>{
     if(e.code==='Tab'&&paused){const buttons=[...overlay.querySelectorAll('button')];if(!buttons.length)return;const first=buttons[0],end=buttons.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();end.focus()}else if(!e.shiftKey&&document.activeElement===end){e.preventDefault();first.focus()}return}
     if(e.code==='Escape'&&!e.repeat){e.preventDefault();if(menu==='rooms'){if(state.status==='complete')complete();else resume()}else pause();return}
@@ -282,5 +284,5 @@
 })();
 
 
-</script></body></html>
+</script><script src="https://game-shelf-dashboard.vercel.app/shelf-scores.js" data-game="nine-lives-above" defer></script></body></html>
 
